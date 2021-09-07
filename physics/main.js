@@ -32,99 +32,46 @@ window.onload = function() {
   		delta = (performance.now() - lastCalledTime)/1000;
   		lastCalledTime = performance.now();
   		fps = 1/delta;
-} 	
+	} 	
 
-	getDist = function (x1, y1, x2, y2) {
-		var dX = x1 - x2;
-		var dY = y1 - y2;
-		return Math.sqrt(dX * dX + dY * dY);
-	}
-	intersects = function (a,b,c,d,p,q,r,s) {
-  		var det, gamma, lambda;
-  		det = (c - a) * (s - q) - (r - p) * (d - b);
-  		if (det === 0) {
-    	return false;
-  		} else {
-    	lambda = ((s - q) * (r - a) + (p - r) * (s - b)) / det;
-    	gamma = ((b - d) * (r - a) + (c - a) * (s - b)) / det;
-    	return (0 < lambda && lambda < 1) && (0 < gamma && gamma < 1);
-  }
-};
-
-	addPoint = function (pointX, pointY, pointMass, pointAnchor) {
-		lastId++;
-		points.push({
-		x: pointX,
-		y: pointY,
-		oldx: pointX,
-		oldy: pointY,
-		mass: pointMass,
-		anchor: pointAnchor,
-		deleted: false,
-		id:lastId
-		});
-	}
-	getClosestPoint = function (mX, mY) {
-		var minDist = Infinity;
-		var point;
-
-		for (var i = 0; i < points.length; i ++) {
-			var p = points[i];
-			var tempDist = getDist(p.x, p.y, mX, mY);
-			if (tempDist < minDist) {
-				minDist = tempDist;
-				point = points[i];
-			}
-		}
-		if (minDist > 10)
-			return null;
-		return point;
-	}
-
-	addConnection = function (point1, point2, connectionLength, connectionType, extraInfo) {
-		lastConnId++;
-		if (connectionLength > 0) {
-			connections.push({
-			p1: point1,
-			p2: point2,
-			length: connectionLength,
-			type: connectionType,
-			info: extraInfo,
-			deleted: false,
-			id:lastConnId
-			});
-		}
-		else {
-			connections.push({
-			p1: point1,
-			p2: point2,
-			length: getDist(point1.x, point1.y, point2.x, point2.y),
-			type: connectionType,
-			info: extraInfo,
-			deleted: false,
-			id:lastConnId
-			});
-		}
-	}
 	cutConnection = function (x1, y1, x2, y2) {
     	for (var i = 0; i < connections.length; i ++) {
     		var c = connections[i];
     		if (intersects(c.p1.x, c.p1.y, c.p2.x, c.p2.y, x1, y1, x2, y2)) {
     			connections[i].deleted = true;
-    			//connections.pop(i);
     		}
     	}
 	}
+	function calculateVelocity (point) {
+		return {
+			x: (point.x - point.oldx) * friction,
+			y: (point.y - point.oldy) * friction
+		}
 
-
+	}
 	clear = function () {
 		deleted = false;
 		points = [];
 		connections = [];
 	}
-
 	getPoint = function (index) {
 		return points[index];
+	}
+	getLastId = function (amount) {
+		if (amount == -1) {
+			return lastId;
+		}
+		else {
+			lastId = amount;
+		}	
+	}
+	getLastConnId = function (amount) {
+		if (amount == -1) {
+			return lastConnId;
+		}
+		else {
+			lastConnId = amount;
+		}
 	}
 	changeGravity = function (amount) {
 		gravity += amount;
@@ -151,11 +98,12 @@ window.onload = function() {
 		return connections;
 	}
 	setPoints = function (thing) {
-		points = copyArray(thing);
+		points = thing;
 	}
 	setConnections = function (thing) {
-		connections = copyArray(thing);
+		connections = thing;
 	}
+
 	update();
 
 	function update() {
@@ -171,11 +119,12 @@ window.onload = function() {
 		if (!paused) {
 			updatePoints();
 			collidePoints();
-
 			for (var i = 0; i < connIters; i ++) {
 				updateConnections();
 			}
+			collideLines();
 		}
+
 		updateUI();
 
 		context.clearRect(0, 0, width, height);
@@ -186,14 +135,6 @@ window.onload = function() {
 
 
 		requestAnimationFrame(update);
-	}
-
-	function calculateVelocity (point) {
-		return {
-			x: (point.x - point.oldx) * friction,
-			y: (point.y - point.oldy) * friction
-		}
-
 	}
 
 	function updatePoints () {
@@ -259,8 +200,14 @@ window.onload = function() {
 				c.deleted = true;
 			}
 
-			if (!c.deleted){
+			if (c.p1.anchor && c.p2.anchor) {
+				c.immovable = true;
+			}
+			else {
+				c.immovable = false;
+			}
 
+			if (!c.deleted){
 				var	dx = c.p2.x - c.p1.x;
 					dy = c.p2.y - c.p1.y;
 					distance = Math.sqrt(dx * dx + dy * dy);
@@ -283,10 +230,35 @@ window.onload = function() {
 			}
 		}
 	}
+	function collideLines () {
 
+		for (var i = 0; i < connections.length; i ++) {
+			var c = connections[i];
+			if (!c.deleted && !c.immovable) {
+				for (var j = 0; j < connections.length; j ++) {
+					var g = connections[j];
+					if (g.immovable && connectionsIntersect(c, g)) {
+						var lineC = getLine(c.p1.x, c.p1.y, c.p2.x, c.p2.y);
+							lineG = getLine(g.p1.x, g.p1.y, g.p2.x, g.p2.y);
+							intersection = intersectionGivenEquations(lineC.slope, lineC.b, lineG.slope, lineG.b);
+							surface1 = getClosestPointOnALine(lineG.slope, lineG.b, c.p1.x, c.p1.y);
+							distToSurface1 = getDist(c.p1.x, c.p1.y, surface1.x, surface1.y);
+							surface2 = getClosestPointOnALine(lineG.slope, lineG.b, c.p2.x, c.p2.y);
+							distToSurface2 = getDist(c.p2.x, c.p2.y, surface2.x, surface2.y);
 
-	
-
+						if (distToSurface1 <= distToSurface2) {
+							c.p1.x = surface1.x;
+							c.p1.y = surface1.y;
+						}
+						else {
+							c.p2.x = surface2.x;
+							c.p2.y = surface2.y;
+						}
+					}
+				}
+			}
+		}
+	}
 	function renderPoints () {
 		for(var i = 0; i < points.length; i++) {
 			var p = points[i];
@@ -429,6 +401,10 @@ window.onload = function() {
 				context.fillText("velocity x: " + Math.round(calculateVelocity(p).x), width - 5, y);
 				y += 20;
 				context.fillText("velocity y: " + Math.round(calculateVelocity(p).y), width - 5, y);
+				y += 20;
+				context.fillText("pos x: " + Math.round(p.x), width - 5, y);
+				y += 20;
+				context.fillText("pos y: " + Math.round(p.y), width - 5, y);
 				y += 20;
 			}
 		}

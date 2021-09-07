@@ -17,6 +17,21 @@
 		pressedButtons.push(false);
 	}
 
+	make2dArray = function (length) {
+		var out = new Array(length);
+		for (var i = 0; i < out.length; i ++) {
+			out[i] = [];
+		}
+		return out;
+	}
+	copyArray = function (array) {
+		var to = [];
+		for (var i = 0; i < array.length; i ++) {
+			to.push(JSON.parse(JSON.stringify(array[i])));
+		}
+		return to;
+	}
+
 	updateUI = function () {
 
 		if (snapToGrid) {
@@ -31,27 +46,12 @@
   			selectedPoint.x = mX;
   			selectedPoint.y = mY;
   		}
-  		//console.log();
-	}
-
-	make2dArray = function (length) {
-		var out = new Array(length);
-		for (var i = 0; i < out.length; i ++) {
-			out[i] = [];
-		}
-		return out;
 	}
 
 	var savedPoints = make2dArray(10);
 		savedConnections = make2dArray(10);
-
-	copyArray = function (array) {
-		var to = [];
-		for (var i = 0; i < array.length; i ++) {
-			to.push(array[i]);
-		}
-		return to;
-	}
+		savedLastIds = new Array(10);
+		savedLastConnIds = new Array(10);
 
 	getSize = function (argument) {
 		return size;
@@ -127,14 +127,34 @@
 					makeCloth(40 * size, 16 * size, 40 / size);
 				}
 				else if (pressedButtons[83]){
-					console.log("saved at slot " + (code - 48));
-					savedPoints[code - 49] = copyArray(getPointsArray());
-					savedConnections[code - 49] = copyArray(getConnectionsArray());
+					index = code - 49;
+					//console.log("saved at slot " + (code - 48));
+					savedPoints[index] = copyArray(getPointsArray());
+					savedConnections[index] = copyArray(getConnectionsArray());
+
+					savedLastIds[index] = getLastId(-1);
+					savedLastConnIds[index] = getLastConnId(-1);
 				}
 				else {
-					console.log("loaded slot " + (code - 48));
-					setPoints(savedPoints[code - 49]);
-					setConnections(savedConnections[code - 49]);
+					index = code - 49;
+					//console.log("loaded slot " + (code - 48));
+
+					pointsOut = copyArray(savedPoints[index]);
+					connectionsOut = copyArray(savedConnections[index]);
+
+					for (var i = 0; i < connectionsOut.length; i ++) {
+						var c = connectionsOut[i];
+						c.p1 = pointsOut[c.p1.id - 1];
+						c.p2 = pointsOut[c.p2.id - 1];
+					}
+
+					setPoints(pointsOut);
+					setConnections(connectionsOut);
+
+					getLastId(savedLastIds[index]);
+					getLastConnId(savedLastConnIds[index]);
+
+
 				}
         		break;
 
@@ -187,7 +207,7 @@
         			changeConnIters(1);
         		}        	
         		break;       		
-        	default: console.log(code); //Everything else
+        	default: //console.log(code); //Everything else
    		}
 	}
 
